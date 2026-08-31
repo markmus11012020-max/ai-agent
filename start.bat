@@ -13,15 +13,8 @@ cd /d "%~dp0"
 
 REM --- Остановка процессов и очистка кэша ---
 echo [INFO] Останавливаю запущенные процессы streamlit/python...
-for /f "tokens=*" %%p in ('tasklist /FI "IMAGENAME eq streamlit.exe" /FO CSV /NH 2^>nul') do (
-    for /f "tokens=2 delims=," %%pid in ("%%p") do (
-        set "PID=%%~pid"
-        taskkill /F /PID %%~pid >nul 2>&1
-    )
-)
-for /f "tokens=2 delims=," %%pid in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV /NH ^| findstr /I "streamlit_app"') do (
-    taskkill /F /PID %%~pid >nul 2>&1
-)
+taskkill /F /IM streamlit.exe >nul 2>&1
+taskkill /F /IM pythonw.exe >nul 2>&1
 echo [INFO] Очищаю кэш (__pycache__, .streamlit)...
 if exist "__pycache__" rd /s /q "__pycache__" >nul 2>&1
 for /d /r "%~dp0" %%d in (__pycache__) do @rd /s /q "%%d" >nul 2>&1
@@ -83,23 +76,24 @@ if errorlevel 1 (
 echo [OK] Зависимости установлены.
 
 REM 4. Проверка .env
-if not exist ".env" (
-    echo [WARN] Файл .env не найден. Создаю шаблон...
-    > .env (
-        echo OPENAI_API_KEY=your_key_here
-        echo OPENAI_API_BASE=https://api.aitunnel.ru/v1
-        echo LLM_MODEL=minimax/minimax-m3
-        echo.
-        echo # Логин/пароль от личного кабинета Sletat.ru
-        echo SLETAT_LOGIN=
-        echo SLETAT_PASSWORD=
-        echo SLETAT_BASE_URL=https://module.sletat.ru/Main.svc
-    )
-    echo [INFO] Заполните .env (OPENAI_API_KEY, SLETAT_LOGIN, SLETAT_PASSWORD) и перезапустите.
-    notepad .env
-    pause
-    exit /b 0
-)
+if not exist ".env" goto SKIP_ENV
+goto AFTER_ENV
+:SKIP_ENV
+echo [WARN] Файл .env не найден. Создаю шаблон...
+break > .env
+echo OPENAI_API_KEY=your_key_here>> .env
+echo OPENAI_API_BASE=https://api.aitunnel.ru/v1>> .env
+echo LLM_MODEL=minimax/minimax-m3>> .env
+echo.>> .env
+echo # Логин/пароль от личного кабинета Sletat.ru>> .env
+echo SLETAT_LOGIN=>> .env
+echo SLETAT_PASSWORD=>> .env
+echo SLETAT_BASE_URL=https://module.sletat.ru/Main.svc>> .env
+echo [INFO] Заполните .env (OPENAI_API_KEY, SLETAT_LOGIN, SLETAT_PASSWORD) и перезапустите.
+notepad .env
+pause
+exit /b 0
+:AFTER_ENV
 
 REM 5. Проверка синтаксиса
 echo [INFO] Проверяю синтаксис...

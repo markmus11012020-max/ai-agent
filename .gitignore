@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Память агента (локальные данные)
+memory.json
+
+# Логи
+*.log
+_pip*.log
+_po.log
+_pe.log
+_pi.log
+_p.log
+_c.log
+_c2.log
+_chk.log
+_h.txt
+_imp.log
+_idx.txt
+
+# Временные скрипты разработчика
+_patch_tools.py
+_sletat_block.py
+
+# IDE
+.idea/
+.vscode/
+*.swp

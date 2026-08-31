@@ -11,6 +11,26 @@ REM ============================================================
 
 cd /d "%~dp0"
 
+REM --- Остановка процессов и очистка кэша ---
+echo [INFO] Останавливаю запущенные процессы streamlit/python...
+for /f "tokens=*" %%p in ('tasklist /FI "IMAGENAME eq streamlit.exe" /FO CSV /NH 2^>nul') do (
+    for /f "tokens=2 delims=," %%pid in ("%%p") do (
+        set "PID=%%~pid"
+        taskkill /F /PID %%~pid >nul 2>&1
+    )
+)
+for /f "tokens=2 delims=," %%pid in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV /NH ^| findstr /I "streamlit_app"') do (
+    taskkill /F /PID %%~pid >nul 2>&1
+)
+echo [INFO] Очищаю кэш (__pycache__, .streamlit)...
+if exist "__pycache__" rd /s /q "__pycache__" >nul 2>&1
+for /d /r "%~dp0" %%d in (__pycache__) do @rd /s /q "%%d" >nul 2>&1
+if exist ".streamlit\cache" rd /s /q ".streamlit\cache" >nul 2>&1
+if exist "%LOCALAPPDATA%\streamlit\Cache" rd /s /q "%LOCALAPPDATA%\streamlit\Cache" >nul 2>&1
+del /s /q "%~dp0*.pyc" >nul 2>&1
+echo [OK] Очистка завершена.
+echo.
+
 set "PYTHON=python"
 set "VENV_DIR=.venv"
 set "PORT=8501"

@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 # LangChain / LLM
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-from langchain_core.prompts import PromptTemplate
+
+
+
 
 # Импорт инструментов. Поддерживаем запуск как из пакета, так и напрямую.
 try:
@@ -69,14 +71,6 @@ except ImportError:  # запуск как скрипт
 # Загрузка переменных окружения
 load_dotenv()
 
-# Инициализация LLM
-llm = ChatOpenAI(
-    model="minimax/minimax-m3",
-    openai_api_key=os.getenv("OPENAI_API_KEY"),
-    openai_api_base="https://api.aitunnel.ru/v1",
-)
-
-# Набор инструментов
 tools = [
     web_search_tool,
     http_request_tool,
@@ -105,30 +99,26 @@ tools = [
     format_sletat_tour_tool,
 ]
 
+
+# Инициализация LLM
+llm = ChatOpenAI(
+    model="minimax/minimax-m3",
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    openai_api_base="https://api.aitunnel.ru/v1",
+)
+
 # Системный промпт
-prompt = PromptTemplate.from_template("""
-Вы — AI-ассистент с доступом к следующим инструментам:
+SYSTEM_PROMPT = (
+    "Вы — AI-ассистент экосистемы Multitour / Sletat. "
+    "У вас есть набор инструментов (web_search, http_request, чтение/запись файлов, "
+    "выполнение команд, погода, криптовалюты, поиск туров, оформление заявок и т.д.). "
+    "Используйте инструменты, когда они действительно нужны для ответа. "
+    "Отвечайте на русском языке, кратко и по делу. "
+    "Если инструмент вернул ошибку или пустой результат — сообщите об этом пользователю."
+)
 
-{tools}
-
-Используйте следующий формат:
-
-Question: вопрос пользователя
-Thought: обдумайте вопрос и выберите инструмент
-Action: название инструмента, должно быть одним из [{tool_names}]
-Action Input: входные данные для инструмента
-Observation: результат действия
-... повторяйте при необходимости ...
-
-Final Answer: окончательный ответ на вопрос
-
-Начнем!
-
-Question: {input}
-""")
-
-# Создание агента
-agent = create_react_agent(llm, tools, prompt=prompt)
+# Создание агента (используем встроенный системный промпт prebuilt-агента)
+agent = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
 
 
 class _AgentExecutorWrapper:

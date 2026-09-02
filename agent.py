@@ -139,7 +139,36 @@ class _AgentExecutorWrapper:
 
     def invoke(self, payload, config=None):
         user_input = payload.get("input", "") if isinstance(payload, dict) else str(payload)
-        result = self._graph.invoke({"messages": [{"role": "user", "content": user_input}]})
+
+        # Извлекаем temperature из config (если передан)
+        temperature = None
+        if isinstance(config, dict):
+            temperature = config.get("temperature")
+
+        # Подменяем LLM с нужной температурой при необходимости
+        if temperature is not None:
+            try:
+                # Пересоздаём агента с LLM нужной температуры
+                from langchain_openai import ChatOpenAI
+                import os as _os
+
+                temp_llm = ChatOpenAI(
+                    model=_os.getenv("LLM_MODEL", "minimax/minimax-m3"),
+                    openai_api_key=_os.getenv("OPENAI_API_KEY"),
+                    openai_api_base=_os.getenv("OPENAI_API_BASE"),
+                    temperature=float(temperature),
+                )
+                graph = create_react_agent(temp_llm, self.tools, prompt=SYSTEM_PROMPT)
+                result = graph.invoke({"messages": [{"role": "user", "content": user_input}]})
+            except Exception:
+                result = self._graph.invoke(
+                    {"messages": [{"role": "user", "content": user_input}]}
+                )
+        else:
+            result = self._graph.invoke(
+                {"messages": [{"role": "user", "content": user_input}]}
+            )
+
         # Достаём последний текст из сообщений
         output = ""
         if isinstance(result, dict) and "messages" in result:

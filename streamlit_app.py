@@ -9,12 +9,12 @@ from agent import agent_executor
 st.set_page_config(page_title="AI-агент с инструментами", layout="wide")
 st.title("🌍 AI-агент с поддержкой инструментов")
 
-# Инициализация сессии для хранения состояния чата турагента
-if "tour_chat_history" not in st.session_state:
-    st.session_state.tour_chat_history = []
+# Инициализация сессии для хранения состояния чатов
+if "gen_chat_history" not in st.session_state:
+    st.session_state.gen_chat_history = []
 
-if "tour_stage" not in st.session_state:
-    st.session_state.tour_stage = "greeting"  # greeting, questions, recommendations
+if "gen_temperature" not in st.session_state:
+    st.session_state.gen_temperature = 0.3
 
 # Создаем пять вкладок
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -29,21 +29,109 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # Вкладка 1 – Общий вопрос
 # =====================================================================
 with tab1:
-    st.header("Запросы общего характера")
+    st.header("💬 Чат с ИИ — общие вопросы")
     example = """- Кратко расскажите последние новости об ИИ.
 - Напишите короткое стихотворение о Python.
 - Перечислите файлы в текущей директории."""
-    st.markdown("Примеры запросов:")
+    st.markdown("**Примеры запросов:**")
     st.code(example)
 
-    user_input = st.text_input("Ваш вопрос:", key="gen")
-    if st.button("Спросить", key="gen_btn"):
-        if user_input:
-            with st.spinner("Агент обрабатывает запрос..."):
-                result = agent_executor.invoke({"input": user_input})
-                st.write("**Агент:**", result.get("output", str(result)))
+    # --- Настройки чата ---
+    st.markdown("##### ⚙️ Настройки")
+    st.slider(
+        "Температура (креативность ответа)",
+        min_value=0.0,
+        max_value=1.0,
+        value=st.session_state.gen_temperature,
+        step=0.05,
+        key="gen_temp_slider",
+        help="0.0 — точные и предсказуемые ответы, 1.0 — креативные и разнообразные",
+    )
+    # Синхронизируем slider с session_state
+    st.session_state.gen_temperature = st.session_state.gen_temp_slider
+
+    st.markdown("---")
+    st.subheader("📝 Диалог")
+
+    # --- Контейнер истории чата ---
+    chat_box = st.container(height=450, border=True)
+    with chat_box:
+        if not st.session_state.gen_chat_history:
+            st.info("👋 Привет! Задайте мне любой вопрос — начнём диалог.")
         else:
-            st.warning("Пожалуйста, введите вопрос.")
+            for msg in st.session_state.gen_chat_history:
+                avatar = "🧑‍💻" if msg["role"] == "user" else "🤖"
+                name = "Вы" if msg["role"] == "user" else "ИИ-ассистент"
+                with st.chat_message(name, avatar=avatar):
+                    st.markdown(msg["content"])
+
+    st.markdown("---")
+
+    # --- Поле ввода с поддержкой Enter (отправка по Enter через st.chat_input) ---
+    prompt = st.chat_input(
+        "Введите сообщение и нажмите Enter…",
+        key="gen_chat_input",
+    )
+
+    # Кнопки управления
+    btn_col1, btn_col2 = st.columns([1, 5])
+    with btn_col1:
+        ask_btn = st.button("🤖 Спросить ИИ", use_container_width=True)
+    with btn_col2:
+        clear_btn = st.button("🧹 Очистить чат", use_container_width=True)
+
+    # --- Очистка истории ---
+    if clear_btn:
+        st.session_state.gen_chat_history = []
+        st.rerun()
+
+    # --- Отправка запроса ---
+    user_text = prompt if prompt else None
+    if ask_btn and not user_text:
+        # если нажата кнопка без текста — берём последнее значение из поля
+        user_text = st.session_state.get("gen_chat_input_text", "").strip() or None
+
+    if user_text:
+        user_text = user_text.strip()
+        if not user_text:
+            st.warning("Пожалуйста, введите сообщение.")
+        else:
+            # Добавляем сообщение пользователя в историю
+            st.session_state.gen_chat_history.append(
+                {"role": "user", "content": user_text}
+            )
+
+            # Формируем контекст диалога
+            chat_context = "\n".join(
+                [
+                    f"{'Пользователь' if m['role'] == 'user' else 'Ассистент'}: {m['content']}"
+                    for m in st.session_state.gen_chat_history
+                ]
+            )
+            full_prompt = (
+                "Продолжи диалог с пользователем, учитывая всю историю переписки ниже. "
+                "Отвечай на русском языке, кратко и по делу.\n\n"
+                f"=== ИСТОРИЯ ДИАЛОГА ===\n{chat_context}\n\n=== ТВОЙ ОТВЕТ ==="
+            )
+
+            with st.spinner("🤖 ИИ думает..."):
+                try:
+                    result = agent_executor.invoke(
+                        {"input": full_prompt},
+                        config={"temperature": st.session_state.gen_temperature},
+                    )
+                    answer = result.get("output", str(result))
+                except TypeError:
+                    # Если обёртка не поддерживает config — вызываем без него
+                    result = agent_executor.invoke({"input": full_prompt})
+                    answer = result.get("output", str(result))
+                except Exception as exc:
+                    answer = f"❌ Ошибка при обработке запроса: {exc}"
+
+            st.session_state.gen_chat_history.append(
+                {"role": "assistant", "content": answer}
+            )
+            st.rerun()
 
 # =====================================================================
 # Вкладка 2 – Погода

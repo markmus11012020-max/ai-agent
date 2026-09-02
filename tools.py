@@ -79,11 +79,23 @@ def _offers_to_payload(result, max_results=5):
     }
 
 
-# === 1. Веб-поиск ===
+# === 1. Веб-поиск (DuckDuckGo) ===
 def web_search(query):
-    ddgs = DDGS()
-    results = ddgs.text(query, max_results=5)
-    return "\n".join([f"{r['title']}: {r['body']}" for r in results])
+    """Поиск через DuckDuckGo. Используется как основной инструмент верификации фактов."""
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=5))
+    except Exception as exc:
+        return f"Ошибка поиска DuckDuckGo: {exc}"
+    if not results:
+        return "По DuckDuckGo ничего не найдено. Уточните запрос."
+    lines = []
+    for r in results:
+        title = r.get("title") or r.get("Title") or ""
+        body = r.get("body") or r.get("Body") or ""
+        href = r.get("href") or r.get("Url") or r.get("url") or ""
+        lines.append(f"{title}: {body}\nСсылка: {href}")
+    return "\n\n".join(lines)
 
 
 # === 2. HTTP ===

@@ -16,6 +16,9 @@ if "gen_chat_history" not in st.session_state:
 if "gen_temperature" not in st.session_state:
     st.session_state.gen_temperature = 0.3
 
+if "tour_chat_history" not in st.session_state:
+    st.session_state.tour_chat_history = []
+
 # Создаем пять вкладок
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🎯 Общий вопрос",

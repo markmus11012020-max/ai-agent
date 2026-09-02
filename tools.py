@@ -117,18 +117,46 @@ def write_file(path, content):
 
 
 # === 4. Терминал ===
+# Безопасный whitelist команд: блокируем попытки запуска произвольных бинарников
+# (например, "date" под Windows, которые вешают subprocess на 30 секунд).
+_ALLOWED_CMDS = {
+    # Windows
+    "dir", "cd", "echo", "type", "copy", "move", "del", "ren", "cls",
+    "where", "whoami", "hostname", "ver", "systeminfo", "tasklist",
+    "set", "findstr", "more", "sort", "powershell", "cmd", "python", "pip",
+    # POSIX
+    "ls", "pwd", "cat", "head", "tail", "grep", "find", "wc", "echo",
+    "ps", "uname", "whoami", "date", "env", "which",
+}
+
+
 def run_command(cmd):
     # Кроссплатформенный split: POSIX (shlex) — иначе fallback на Windows-режим.
     try:
         args = shlex.split(cmd, posix=(os.name != "nt"))
     except ValueError:
         args = cmd.split()
+    if not args:
+        return "error: пустая команда"
+    exe = os.path.basename(args[0]).lower()
+    # Снимаем расширение .exe/.cmd/.bat для сравнения с whitelist
+    for ext in (".exe", ".cmd", ".bat", ".ps1"):
+        if exe.endswith(ext):
+            exe = exe[: -len(ext)]
+            break
+    if exe not in _ALLOWED_CMDS:
+        return (
+            f"error: команда '{exe}' запрещена политикой безопасности. "
+            "Используйте web_search / http_request для проверки фактов."
+        )
     try:
         result = subprocess.run(
-            args, capture_output=True, text=True, timeout=30, shell=(os.name == "nt")
+            args, capture_output=True, text=True, timeout=15, shell=False
         )
-    except FileNotFoundError as e:
-        return f"error: {e}"
+    except FileNotFoundError:
+        return f"error: команда '{exe}' не найдена в PATH"
+    except subprocess.TimeoutExpired:
+        return f"error: команда '{exe}' превысила таймаут 15 сек"
     return f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}\nreturncode:{result.returncode}"
 
 

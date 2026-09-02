@@ -16,13 +16,13 @@ if "tour_chat_history" not in st.session_state:
 if "tour_stage" not in st.session_state:
     st.session_state.tour_stage = "greeting"  # greeting, questions, recommendations
 
-# Создаем четыре вкладки
+# Создаем пять вкладок
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🎯 Общий вопрос",
     "🌤️ Погода",
     "💰 Криптовалюта",
     "✈️ Подобрать тур",
-    "🔎 Поиск туров Sletat",
+    "🔎 Поиск туров (Sletat / Multitour)",
 ])
 
 # =====================================================================
@@ -236,220 +236,261 @@ with tab4:
         - 🏖️ Тип отдыха (пляж, горы, город, активный туризм)
         - 🎯 Регион или страна интереса (если есть)
         """)
-
 # =====================================================================
-# Вкладка 5 – Поиск туров Sletat (структурированный поиск)
+# Вкладка 5 — Поиск туров через универсальный фасад (Sletat / Multitour)
 # =====================================================================
 with tab5:
-    st.header("🔎 Поиск туров через Sletat JSON-шлюз")
+    st.header("🔎 Поиск туров (Sletat / Multitour)")
     st.markdown(
-        "Прямая интеграция с [API Sletat.ru](https://wiki.sletat.ru/w/Шлюз_поиска_туров_(json)). "
-        "Загрузите справочники, выберите параметры и получите реальные туры от 130+ туроператоров."
+        "Единый интерфейс поиска туров. Выберите **агрегатор** — Sletat.ru "
+        "(полная интеграция, требуется авторизация в ЛК Sletat) или "
+        "Multitour.ru API v2 (нужен токен)."
     )
 
-    if "sletat_cities" not in st.session_state:
-        st.session_state.sletat_cities = None
-    if "sletat_countries" not in st.session_state:
-        st.session_state.sletat_countries = None
-    if "sletat_resorts" not in st.session_state:
-        st.session_state.sletat_resorts = None
-    if "sletat_meals" not in st.session_state:
-        st.session_state.sletat_meals = None
-    if "sletat_last_results" not in st.session_state:
-        st.session_state.sletat_last_results = None
-    if "sletat_last_request_id" not in st.session_state:
-        st.session_state.sletat_last_request_id = None
+    aggregator = st.radio(
+        "Агрегатор туров",
+        options=["sletat", "multitour"],
+        format_func=lambda v: (
+            "Sletat.ru (SLETAT_LOGIN/SLETAT_PASSWORD)"
+            if v == "sletat" else
+            "Multitour.ru API v2 (MULTITOUR_TOKEN/API_KEY)"
+        ),
+        horizontal=True,
+        key="tours_aggregator",
+    )
+
+    PREFIX = f"tours_{aggregator}"
+    for k in ("countries", "cities", "resorts", "resorts_country",
+              "meals", "last_results", "last_request_id", "last_offers"):
+        st.session_state.setdefault(f"{PREFIX}_{k}", None)
 
     col_load, col_check = st.columns([1, 2])
     with col_load:
-        if st.button("🔄 Загрузить справочники", key="sletat_load_dicts"):
-            from sletat import SletatClient
-            client = SletatClient()
-            if not client.is_auth_configured:
-                st.error(
-                    "❌ Не заданы SLETAT_LOGIN/SLETAT_PASSWORD в `.env`.\n\n"
-                    "Укажите логин и пароль от личного кабинета Sletat.ru."
-                )
-            else:
-                with st.spinner("Загружаю города вылета и страны..."):
-                    try:
-                        st.session_state.sletat_cities = client.get_depart_cities()
-                        st.session_state.sletat_countries = client.get_countries()
+        if st.button("🔄 Загрузить справочники", key=f"{PREFIX}_load"):
+            try:
+                from aggregators import get_aggregator
+                client = get_aggregator(aggregator)
+                if not getattr(client, "is_auth_configured", False):
+                    if aggregator == "sletat":
+                        st.error("❌ Не заданы SLETAT_LOGIN/SLETAT_PASSWORD в `.env`.")
+                    else:
+                        st.error("❌ Не задан MULTITOUR_TOKEN (или API_KEY) в `.env`.")
+                else:
+                    with st.spinner(f"Загружаю справочники {aggregator}..."):
+                        st.session_state[f"{PREFIX}_cities"] = client.get_depart_cities()
+                        st.session_state[f"{PREFIX}_countries"] = client.get_countries()
                         st.success(
-                            f"OK: {len(st.session_state.sletat_cities)} городов, "
-                            f"{len(st.session_state.sletat_countries)} стран"
+                            f"OK: {len(st.session_state[f'{PREFIX}_cities'])} городов, "
+                            f"{len(st.session_state[f'{PREFIX}_countries'])} стран"
                         )
-                    except Exception as exc:
-                        st.error(f"Ошибка загрузки: {exc}")
+            except Exception as exc:
+                st.error(f"Ошибка загрузки: {exc}")
     with col_check:
         st.caption(
-            "Справочники кешируются на время сессии. "
-            "Требуется авторизация в `.env`: `SLETAT_LOGIN` и `SLETAT_PASSWORD`."
+            "Sletat: нужны `SLETAT_LOGIN`/`SLETAT_PASSWORD`. "
+            "Multitour: `MULTITOUR_TOKEN` (или `API_KEY`). "
+            "Кеш хранится отдельно для каждого агрегатора в рамках сессии."
         )
 
-    if st.session_state.sletat_countries:
+    if st.session_state[f"{PREFIX}_countries"]:
         st.markdown("---")
-        st.subheader("📋 Параметры поиска")
+        st.subheader(f"📋 Параметры поиска ({aggregator})")
 
-        countries = st.session_state.sletat_countries
-        cities = st.session_state.sletat_cities or []
+        countries = st.session_state[f"{PREFIX}_countries"] or []
+        cities = st.session_state[f"{PREFIX}_cities"] or []
+
         c1, c2 = st.columns(2)
         with c1:
-            city_options = {f"{c.get('Name','?')} (id={c.get('Id')})": c.get("Id") for c in cities}
+            city_options = {
+                f"{c.get('Name','?')} (id={c.get('Id')})": c.get("Id")
+                for c in cities
+            }
             city_labels = ["— выберите —"] + list(city_options.keys())
             chosen_city_label = st.selectbox(
-                "Город вылета", city_labels, key="sletat_city_sel"
+                "Город вылета", city_labels, key=f"{PREFIX}_city_sel"
             )
-            chosen_city_id = city_options.get(chosen_city_label) if chosen_city_label != "— выберите —" else None
+            chosen_city_id = (
+                city_options.get(chosen_city_label)
+                if chosen_city_label != "— выберите —" else None
+            )
         with c2:
-            country_options = {f"{c.get('Name','?')} (id={c.get('Id')})": c.get("Id") for c in countries}
+            country_options = {
+                f"{c.get('Name','?')} (id={c.get('Id')})": c.get("Id")
+                for c in countries
+            }
             country_labels = ["— выберите —"] + list(country_options.keys())
             chosen_country_label = st.selectbox(
-                "Страна", country_labels, key="sletat_country_sel"
+                "Страна", country_labels, key=f"{PREFIX}_country_sel"
             )
-            chosen_country_id = country_options.get(chosen_country_label) if chosen_country_label != "— выберите —" else None
+            chosen_country_id = (
+                country_options.get(chosen_country_label)
+                if chosen_country_label != "— выберите —" else None
+            )
 
         if chosen_country_id and (
-            not st.session_state.sletat_resorts
-            or st.session_state.get("sletat_resorts_country") != chosen_country_id
+            not st.session_state[f"{PREFIX}_resorts"]
+            or st.session_state[f"{PREFIX}_resorts_country"] != chosen_country_id
         ):
-            from sletat import SletatClient
             try:
-                with st.spinner("Загружаю курорты и питания..."):
-                    client = SletatClient()
-                    st.session_state.sletat_resorts = client.get_resorts(chosen_country_id)
-                    st.session_state.sletat_resorts_country = chosen_country_id
-                    if not st.session_state.sletat_meals:
-                        st.session_state.sletat_meals = client.get_meals()
+                from aggregators import get_aggregator
+                client = get_aggregator(aggregator)
+                with st.spinner("Загружаю курорты..."):
+                    st.session_state[f"{PREFIX}_resorts"] = client.get_resorts(chosen_country_id)
+                    st.session_state[f"{PREFIX}_resorts_country"] = chosen_country_id
+                    if not st.session_state[f"{PREFIX}_meals"]:
+                        try:
+                            st.session_state[f"{PREFIX}_meals"] = client.get_meals()
+                        except Exception:
+                            st.session_state[f"{PREFIX}_meals"] = []
             except Exception as exc:
                 st.error(f"Ошибка загрузки курортов: {exc}")
 
-        resorts = st.session_state.sletat_resorts or []
-        meals = st.session_state.sletat_meals or []
+        resorts = st.session_state[f"{PREFIX}_resorts"] or []
+        meals = st.session_state[f"{PREFIX}_meals"] or []
 
         r1, r2, r3 = st.columns(3)
         with r1:
-            resort_options = {f"{r.get('Name','?')} (id={r.get('Id')})": r.get("Id") for r in resorts}
+            resort_options = {
+                f"{r.get('Name','?')} (id={r.get('Id')})": r.get("Id")
+                for r in resorts
+            }
             resort_labels = ["— любой —"] + list(resort_options.keys())
             chosen_resort_label = st.selectbox(
-                "Курорт", resort_labels, key="sletat_resort_sel"
+                "Курорт", resort_labels, key=f"{PREFIX}_resort_sel"
             )
-            chosen_resort_id = resort_options.get(chosen_resort_label) if chosen_resort_label != "— любой —" else None
+            chosen_resort_id = (
+                resort_options.get(chosen_resort_label)
+                if chosen_resort_label != "— любой —" else None
+            )
         with r2:
             stars_choice = st.selectbox(
-                "Категория отеля", ["любая", "5*", "4*", "3*", "2*", "1*"], key="sletat_stars_sel"
+                "Категория отеля",
+                ["любая", "5*", "4*", "3*", "2*", "1*"],
+                key=f"{PREFIX}_stars_sel",
             )
-            chosen_stars = int(stars_choice[0]) if stars_choice != "любая" else None
+            chosen_stars = (
+                int(stars_choice[0])
+                if stars_choice and stars_choice != "любая" else None
+            )
         with r3:
-            meal_options = {f"{m.get('Name','?')} (id={m.get('Id')})": m.get("Id") for m in meals}
+            meal_options = {
+                f"{m.get('Name','?')} (id={m.get('Id')})": m.get("Id")
+                for m in meals
+            }
             meal_labels = ["— любое —"] + list(meal_options.keys())
-            chosen_meal_label = st.selectbox("Питание", meal_labels, key="sletat_meal_sel")
-            chosen_meal_id = meal_options.get(chosen_meal_label) if chosen_meal_label != "— любое —" else None
+            chosen_meal_label = st.selectbox(
+                "Питание", meal_labels, key=f"{PREFIX}_meal_sel"
+            )
+            chosen_meal_id = (
+                meal_options.get(chosen_meal_label)
+                if chosen_meal_label != "— любое —" else None
+            )
 
         d1, d2, d3, d4 = st.columns(4)
         with d1:
-            date_from = st.date_input("Дата вылета (от)", key="sletat_date_from")
+            date_from = st.date_input("Дата начала", key=f"{PREFIX}_date_from")
         with d2:
-            nights_from = st.number_input("Ночей от", min_value=1, max_value=30, value=7, key="sletat_nights_from")
+            nights_from = st.number_input("Ночей от", 1, 30, 7, key=f"{PREFIX}_n_from")
+            nights_to = st.number_input("до", 1, 30, 10, key=f"{PREFIX}_n_to")
         with d3:
-            nights_to = st.number_input("Ночей до", min_value=1, max_value=30, value=14, key="sletat_nights_to")
+            adults = st.number_input("Взрослых", 1, 10, 2, key=f"{PREFIX}_adults")
+            children = st.number_input("Детей", 0, 10, 0, key=f"{PREFIX}_children")
         with d4:
-            adults = st.number_input("Взрослых", min_value=1, max_value=10, value=2, key="sletat_adults")
+            price_from = st.number_input(
+                "Цена от", min_value=0, value=0, step=10000,
+                key=f"{PREFIX}_p_from",
+            )
+            price_to = st.number_input(
+                "до", min_value=0, value=0, step=10000,
+                key=f"{PREFIX}_p_to",
+            )
 
-        p1, p2 = st.columns(2)
-        with p1:
-            price_from = st.number_input("Цена от", min_value=0, value=0, step=10000, key="sletat_price_from")
-        with p2:
-            price_to = st.number_input("Цена до", min_value=0, value=0, step=10000, key="sletat_price_to")
-
-        if st.button("🚀 Найти туры", key="sletat_search_btn", type="primary"):
+        if st.button("🚀 Найти туры", key=f"{PREFIX}_search", type="primary"):
             if not (chosen_city_id and chosen_country_id):
                 st.warning("Выберите город вылета и страну.")
             else:
-                from sletat import SletatClient
-                client = SletatClient()
-                if not client.is_auth_configured:
-                    st.error("Не заданы SLETAT_LOGIN/SLETAT_PASSWORD в `.env`")
+                from aggregators import get_aggregator, TourSearchParams
+                agg = get_aggregator(aggregator)
+                if not getattr(agg, "is_auth_configured", False):
+                    if aggregator == "sletat":
+                        st.error("Не заданы SLETAT_LOGIN/SLETAT_PASSWORD в `.env`")
+                    else:
+                        st.error("Не задан MULTITOUR_TOKEN (или API_KEY) в `.env`")
                 else:
-                    kwargs = dict(
+                    params = TourSearchParams(
                         city_from_id=chosen_city_id,
                         country_id=chosen_country_id,
-                        adults=int(adults),
+                        resort_id=chosen_resort_id,
+                        hotel_stars=chosen_stars,
+                        meal_id=chosen_meal_id,
+                        date_from=date_from.isoformat() if date_from else None,
                         nights_from=int(nights_from),
                         nights_to=int(nights_to),
+                        adults=int(adults),
+                        children=int(children),
+                        price_from=int(price_from) if price_from > 0 else None,
+                        price_to=int(price_to) if price_to > 0 else None,
                     )
-                    if chosen_resort_id:
-                        kwargs["resort_id"] = chosen_resort_id
-                    if chosen_stars:
-                        kwargs["hotel_stars"] = f"{chosen_stars}*"
-                    if chosen_meal_id:
-                        kwargs["meal_id"] = chosen_meal_id
-                    if date_from:
-                        kwargs["date_from"] = date_from.isoformat()
-                    if price_from > 0:
-                        kwargs["price_from"] = int(price_from)
-                    if price_to > 0:
-                        kwargs["price_to"] = int(price_to)
-
-                    with st.spinner("⏳ Идёт поиск туров у туроператоров..."):
+                    with st.spinner(f"⏳ Идёт поиск туров через {aggregator}..."):
                         try:
-                            res = client.search_and_collect(**kwargs)
-                            st.session_state.sletat_last_results = res
-                            st.session_state.sletat_last_request_id = res.get("requestId")
+                            res = agg.search_and_collect(params)
+                            offers = res.get("offers") or []
+                            st.session_state[f"{PREFIX}_last_results"] = res
+                            st.session_state[f"{PREFIX}_last_request_id"] = res.get("requestId")
+                            st.session_state[f"{PREFIX}_last_offers"] = offers
                             if res.get("error"):
-                                st.error(f"Sletat: {res['error']}")
+                                st.error(f"{aggregator}: {res['error']}")
                             else:
-                                tours = res.get("tours", []) or []
                                 st.success(
-                                    f"✅ Найдено {len(tours)} туров "
+                                    f"✅ Найдено {len(offers)} туров "
                                     f"(requestId: {res.get('requestId')})"
                                 )
                         except Exception as exc:
                             st.error(f"Ошибка поиска: {exc}")
 
-        res = st.session_state.sletat_last_results
-        if res and res.get("tours"):
+        offers = st.session_state[f"{PREFIX}_last_offers"] or []
+        if offers:
             st.markdown("---")
-            st.subheader(f"🏖️ Результаты поиска ({len(res['tours'])})")
-            from sletat import parse_tour_row, format_tour_for_human
-            for i, row in enumerate(res["tours"][:30], start=1):
+            st.subheader(f"🏖️ Результаты поиска ({len(offers)})")
+            for i, off in enumerate(offers[:30], start=1):
+                head = off.to_human().split("\n")[0]
                 with st.expander(
-                    f"#{i} {format_tour_for_human(parse_tour_row(row), max_chars=200)}",
+                    f"#{i} {head}",
                     expanded=(i <= 3),
                 ):
-                    st.text(format_tour_for_human(parse_tour_row(row)))
+                    st.text(off.to_human())
 
             st.markdown("---")
             st.subheader("💳 Актуализация цены и заказ")
             tour_idx = st.number_input(
                 "Номер тура из списка выше",
                 min_value=1,
-                max_value=min(len(res["tours"]), 30),
+                max_value=min(len(offers), 30),
                 value=1,
-                key="sletat_tour_idx",
+                key=f"{PREFIX}_tour_idx",
             )
-            tour_row = res["tours"][tour_idx - 1]
-            parsed = parse_tour_row(tour_row)
-            tour_id = str(parsed.get("tour_id") or "")
-            request_id = st.session_state.sletat_last_request_id
+            chosen_offer = offers[tour_idx - 1]
+            tour_id = chosen_offer.tour_id
+            request_id = st.session_state[f"{PREFIX}_last_request_id"]
 
-            if st.button("🔄 Актуализировать цену", key="sletat_actualize_btn"):
+            if st.button("🔄 Актуализировать цену", key=f"{PREFIX}_actualize"):
                 if not (request_id and tour_id):
                     st.warning("Не удалось получить requestId/tourId.")
                 else:
-                    from sletat import SletatClient
                     try:
-                        price_info = SletatClient().actualize_price(request_id, tour_id)
+                        from aggregators import get_aggregator
+                        agg = get_aggregator(aggregator)
+                        price_info = agg.actualize_price(request_id, tour_id)
                         st.json(price_info)
                     except Exception as exc:
                         st.error(f"Ошибка: {exc}")
 
-            with st.form(key="sletat_order_form"):
+            with st.form(key=f"{PREFIX}_order"):
                 st.markdown("##### 📝 Оформить заявку (без онлайн-оплаты)")
-                name = st.text_input("Имя")
-                phone = st.text_input("Телефон")
-                email = st.text_input("Email (опц.)", value="")
-                comment = st.text_area("Комментарий", value="")
+                name = st.text_input("Имя", key=f"{PREFIX}_order_name")
+                phone = st.text_input("Телефон", key=f"{PREFIX}_order_phone")
+                email = st.text_input("Email (опц.)", value="", key=f"{PREFIX}_order_email")
+                comment = st.text_area("Комментарий", value="", key=f"{PREFIX}_order_comment")
                 submitted = st.form_submit_button("📨 Отправить заявку")
                 if submitted:
                     if not (name and phone):
@@ -457,9 +498,10 @@ with tab5:
                     elif not (request_id and tour_id):
                         st.warning("Сначала выполните поиск.")
                     else:
-                        from sletat import SletatClient
                         try:
-                            order_res = SletatClient().save_tour_order(
+                            from aggregators import get_aggregator
+                            agg = get_aggregator(aggregator)
+                            order_res = agg.save_tour_order(
                                 request_id, tour_id, name, phone, email, comment
                             )
                             st.success("✅ Заявка отправлена!")
@@ -467,40 +509,4 @@ with tab5:
                         except Exception as exc:
                             st.error(f"Ошибка: {exc}")
     else:
-        st.info("👆 Нажмите «Загрузить справочники», чтобы начать.")
-
-# =====================================================================
-# Боковая панель (Sidebar)
-# =====================================================================
-with st.sidebar:
-    st.markdown("### ℹ️ Об агенте")
-    st.info("""
-    **AI-агент с инструментами**
-
-    Версия: 1.0
-
-    Возможности:
-    - 🔍 Веб-поиск
-    - 🌤️ Погода в реальном времени
-    - 💰 Цены криптовалют
-    - ✈️ Подбор туров
-    - 🔎 Поиск туров Sletat
-    - 💾 Сохранение истории
-    """)
-
-    st.markdown("---")
-    st.markdown("### 🔗 Полезные ссылки")
-    st.markdown("""
-    - [Multitour - Авиабилеты](https://www.multitour.ru/tickets/avia/)
-    - [CoinGecko - Крипто](https://coingecko.com/)
-    - [Погода - Multitour](https://www.multitour.ru/)
-    - [Sletat.ru Wiki](https://wiki.sletat.ru/)
-    """)
-
-    st.markdown("---")
-    st.markdown("### 🔗 Полезные ссылки")
-    st.markdown("""
-    - [Multitour - Авиабилеты](https://www.multitour.ru/tickets/avia/)
-    - [CoinGecko - Крипто](https://coingecko.com/)
-    - [Погода - Multitour](https://www.multitour.ru/)
-    """)
+        st.info("👆 Нажмите «Загрузить справочники», чтобы получить список стран/городов.")

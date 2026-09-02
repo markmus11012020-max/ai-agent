@@ -23,8 +23,11 @@ try:
         save_interaction_tool,
         multitour_search_tours_tool,
         search_flights_tool,
-        # Sletat
+        # Универсальный фасад агрегаторов (sletat | multitour)
+        list_aggregators_tool,
         search_tours_tool,
+        search_sletat_tool,
+        search_multitour_tool,
         get_depart_cities_tool,
         get_countries_tool,
         get_resorts_tool,
@@ -51,8 +54,11 @@ except ImportError:  # запуск как скрипт
         save_interaction_tool,
         multitour_search_tours_tool,
         search_flights_tool,
-        # Sletat
+        # Универсальный фасад агрегаторов (sletat | multitour)
+        list_aggregators_tool,
         search_tours_tool,
+        search_sletat_tool,
+        search_multitour_tool,
         get_depart_cities_tool,
         get_countries_tool,
         get_resorts_tool,
@@ -82,8 +88,11 @@ tools = [
     save_interaction_tool,
     multitour_search_tours_tool,
     search_flights_tool,
-    # Sletat
+    # Универсальный фасад агрегаторов туров (sletat | multitour)
+    list_aggregators_tool,
     search_tours_tool,
+    search_sletat_tool,
+    search_multitour_tool,
     get_depart_cities_tool,
     get_countries_tool,
     get_resorts_tool,

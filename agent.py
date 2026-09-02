@@ -111,9 +111,9 @@ tools = [
 
 # Инициализация LLM
 llm = ChatOpenAI(
-    model="minimax/minimax-m3",
+    model=os.getenv("LLM_MODEL", "minimax/minimax-m3"),
     openai_api_key=os.getenv("OPENAI_API_KEY"),
-    openai_api_base="https://api.aitunnel.ru/v1",
+    openai_api_base=os.getenv("OPENAI_API_BASE"),
 )
 
 # Системный промпт

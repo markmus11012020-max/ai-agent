@@ -51,7 +51,7 @@ AI-агент с набором инструментов (веб-поиск, п�
 2. Заполните `.env`:
    ```ini
    OPENAI_API_KEY=sk-...
-   OPENAI_API_BASE=https://api.aitunnel.ru/v1
+   OPENAI_API_BASE=https://proxy.gen-api.ru/v1
    LLM_MODEL=minimax/minimax-m3
 
    MULTITOUR_API_URL=https://www.multitour.ru/api/v2/

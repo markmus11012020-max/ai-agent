@@ -106,9 +106,17 @@ def write_file(path, content):
 
 # === 4. Терминал ===
 def run_command(cmd):
-    result = subprocess.run(
-        shlex.split(cmd), capture_output=True, text=True, timeout=30
-    )
+    # Кроссплатформенный split: POSIX (shlex) — иначе fallback на Windows-режим.
+    try:
+        args = shlex.split(cmd, posix=(os.name != "nt"))
+    except ValueError:
+        args = cmd.split()
+    try:
+        result = subprocess.run(
+            args, capture_output=True, text=True, timeout=30, shell=(os.name == "nt")
+        )
+    except FileNotFoundError as e:
+        return f"error: {e}"
     return f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}\nreturncode:{result.returncode}"
 
 
